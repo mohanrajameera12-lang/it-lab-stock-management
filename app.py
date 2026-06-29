@@ -120,10 +120,19 @@ def main_app():
     st.caption(f"{now_str()} | {st.session_state.username} ({st.session_state.role})")
 
     # ---------- LOW STOCK ALERT ----------
-    df_systems = pd.read_sql("SELECT * FROM systems", conn)
-    low_stock = df_systems[df_systems["quantity"] <= 5]  # Threshold 5
+    # ---------- LOW STOCK ALERT ----------
+df_systems = pd.read_sql("SELECT * FROM systems", conn)
+
+# Check if required column exists
+if "quantity" not in df_systems.columns:
+    st.warning("Database schema mismatch. Please delete inventory.db and restart the app.")
+else:
+    low_stock = df_systems[df_systems["quantity"] <= 5]
+
     if not low_stock.empty:
         st.sidebar.markdown("### ⚠️ Low Stock Items")
+        for _, row in low_stock.iterrows():
+            st.sidebar.write(f"{row['name']} - Qty: {row['quantity']}")
         for _, row in low_stock.iterrows():
             st.sidebar.write(f"{row['name']} - Qty: {row['quantity']}")
 
@@ -308,9 +317,31 @@ def main_app():
         file = st.file_uploader("Upload Excel", type=["xlsx"])
         if file:
             df = pd.read_excel(file)
-            df.to_sql("systems", conn, if_exists="replace", index=False)
-            st.success("Uploaded")
-            st.rerun()
+df.columns = [c.strip().lower() for c in df.columns]
+
+required = ["system_no", "name", "quantity", "quality", "status"]
+
+if not all(col in df.columns for col in required):
+    st.error("Excel columns must be: system_no, name, quantity, quality, status")
+else:
+    c.execute("DELETE FROM systems")
+    conn.commit()
+
+    for _, row in df.iterrows():
+        c.execute(
+            "INSERT INTO systems(system_no,name,quantity,quality,status) VALUES(?,?,?,?,?)",
+            (
+                int(row["system_no"]),
+                str(row["name"]),
+                int(row["quantity"]),
+                str(row["quality"]),
+                str(row["status"]),
+            ),
+        )
+
+    conn.commit()
+    st.success("Excel Uploaded Successfully")
+    st.rerun()
 
         df = pd.read_sql("SELECT * FROM systems", conn)
         df.to_excel("inventory.xlsx", index=False)
